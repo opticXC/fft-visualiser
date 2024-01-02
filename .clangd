@@ -1,0 +1,2 @@
+CompileFlags:
+  Add : [ -I./libs/raylib/src , -std=c99 ]
