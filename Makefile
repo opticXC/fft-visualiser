@@ -12,6 +12,7 @@ CC:=clang
 ifeq ($(OS),Windows_NT)
 	RAYLIB_PLATFORM:=PLATFORM_DESKTOP
 	target:=$(target).exe
+	CC=x86_64-w64-mingw32-gcc
 else
 	UNAME_S := $(shell uname -s)
 	ifeq ($(UNAME_S),Linux)

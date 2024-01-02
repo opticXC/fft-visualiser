@@ -1,12 +1,13 @@
-##
-##
-
-setup xhost before running
----
-xhost si:localhost:root
 ---
 
-and later disable with
----
-xhost -si:localhost:root
----
+usage
+
+`visualiser <path-to-audio-file>`
+
+
+supported formats
+
+MP3
+WAV
+OOC
+
