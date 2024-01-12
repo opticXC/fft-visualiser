@@ -1,4 +1,5 @@
 ---
+# Like every passion project, this will be rewritten in rust
 
 usage
 

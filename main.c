@@ -1,4 +1,3 @@
-#include <bits/stdint-uintn.h>
 #include <complex.h>
 #include <math.h>
 #include <raylib.h>
@@ -7,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 float pi;
 float clamp(float min, float max, float val) {
@@ -23,16 +23,19 @@ typedef struct {
 } Frame;
 
 #define FFT_SIZE 512
+static unsigned int SAMPLE_RATE = 48000;
+#define BASEBAND_RESOLUTION (SAMPLE_RATE/FFT_SIZE)
+#define TIMEBLOCK_LENGTH (1/BASEBAND_RESOLUTION)
+
 
 float global_raw_in[FFT_SIZE];
 float complex global_raw_out[FFT_SIZE];
 
 void FFT(float in[], size_t stride, float complex out[], size_t n) {
-	if (n < 0)
-		return;
+	assert(n>0);
 
 	if (n == 1) {
-		out[0] = in[0];
+		out[0] = (float complex) in[0];
 		return;
 	}
 
@@ -51,7 +54,7 @@ void FFT(float in[], size_t stride, float complex out[], size_t n) {
 float Amplitude(float complex c) {
 	float real = crealf(c);
 	float img = cimagf(c);
-	return logf(real*real + img*img);
+	return sqrt(real*real + img*img);
 }
 
 float max_amp = 0.0f;
@@ -67,7 +70,7 @@ void ProcessAudio(void *buffer, unsigned int frames) {
 	FFT(global_raw_in, 1, global_raw_out, FFT_SIZE);
 
 	max_amp = 0.0f;
-	for (size_t i = 0; i < FFT_SIZE; i++) {
+	for (size_t i = 1; i < FFT_SIZE; i++) {
 		float complex c = global_raw_out[i];
 		float amp = Amplitude(c);
 		if (max_amp < amp)
@@ -77,70 +80,60 @@ void ProcessAudio(void *buffer, unsigned int frames) {
 
 
 
-unsigned int FFT_FREQS[12] = {16, 32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000, 22000};
-#define VB_SIZE 12
-static float VISUAL_BUFFER[VB_SIZE] = {0.0f};
+#define VB_SIZE 10
+static float VISUAL_BUFFER[VB_SIZE][VB_SIZE] = {0};
 
 /* sample size if 512
  * variable sample rate should be handled
- * 0 * 44100 / 512 = 0Hz
- * 1 * 44100 / 512 = 43.1Hz
- * 2 * 44100 / 512 = 86.1Hz
- * 3 * 44100 / 512 = 129.2Hz
- * 4 * 44100 / 512 = 172.3Hz
- * 5 * 44100 / 512 = 215.3Hz
- * 6 * 44100 / 512 = 258.4Hz
- * 7 * 44100 / 512 = 301.5Hz
- * 8 * 44100 / 512 = 344.6Hz
- * 9 * 44100 / 512 = 387.6Hz
- * 10 * 44100 / 512 = 430.7Hz
+ * 0 * 48000 / 512 = 0Hz
+ * 1 * 48000 / 512 = 93.75Hz
+ * 2 * 48000 / 512 = 187.5Hz
+ * 3 * 48000 / 512 = 281.25Hz
+ * 4 * 48000 / 512 = 375Hz
+ * 5 * 48000 / 512 = 468.75Hz
+ * 6 * 48000 / 512 = 562.5Hz
+ * 7 * 48000 / 512 = 656.25Hz
+ * 8 * 48000 / 512 = 750Hz
+ * 9 * 48000 / 512 = 843.75Hz
+ * 10 * 48000 / 512 = 937.5Hz
+ * 11 * 48000 / 512 = 1031.25Hz
+ * 12 * 48000 / 512 = 1125Hz
  * and  so on.....
- * 
- * for the needed freq, we need to find the closest sample
- * 32Hz = 0.73 * 43.1Hz
- * 64Hz = 1.47 * 43.1Hz or 0.73 * 86.1Hz
- * 125Hz = 1.47 * 86.1Hz or 0.73 * 172.3Hz
- * 250Hz = 1.47 * 172.3Hz or 0.73 * 344.6Hz
- * 500Hz = 1.47 * 344.6Hz or 0.73 * 689.1Hz
- * 1000Hz = 1.47 * 689.1Hz or 0.73 * 1378.1Hz
- * 2000Hz = 1.47 * 1378.1Hz or 0.73 * 2756.3Hz
- * 4000Hz = 1.47 * 2756.3Hz or 0.73 * 5512.5Hz
- * 8000Hz = 1.47 * 5512.5Hz or 0.73 * 11025Hz
- * 16000Hz = 1.47 * 11025Hz or 0.73 * 22050Hz
- * should be enough.... i hope
+ * for bind < FFT_SIZE/2 
  *
- * 0.73 should be more consistent...
+ * should be enough.... i hope
+ * yeah i give up
  */
 
-unsigned int sample_rate = 44100;
-
-void ProcessFFT(){
-	for (size_t i=0; i<VB_SIZE; i++){
-		unsigned int freq = FFT_FREQS[i];
-		unsigned int sample = freq * 44100 / FFT_SIZE;
-		unsigned int sample_index = sample / (sample_rate / FFT_SIZE);
-		float complex c = global_raw_out[sample_index];
-		float amp = Amplitude(c);
-		VISUAL_BUFFER[i] = amp / max_amp;
+void ProcessFFT(float dt){
+	for (size_t i=0;i<VB_SIZE-1; i++){
+		for (size_t j=0; j<FFT_SIZE;j++){
+			VISUAL_BUFFER[i][j] = VISUAL_BUFFER[i+1][j];
+		}
+			
+	}
+	for(size_t i=1; i<FFT_SIZE; i++){
+		float complex sample = global_raw_out[i];
+		float amp = Amplitude(sample);
+		amp = clamp(0.0f, 1.0f, amp/max_amp);
+		VISUAL_BUFFER[VB_SIZE-1][i] = amp;
 	}
 }
 
-void PrintSamples(){
-	for (size_t i=0; i<VB_SIZE; i++){
-		unsigned int freq = FFT_FREQS[i];
-		float amp = VISUAL_BUFFER[i];
-		printf("%iHz: %f\n", freq, amp);
-	}
-}
 
 void DrawFFT(float x, float y, float w, float h, Color color) {
 	float bar_width = w / VB_SIZE;
-	float spacing = bar_width / 4;
-	bar_width -= spacing;
-	for (size_t i = 0; i < VB_SIZE; i++) {
-		float bar_height = h * VISUAL_BUFFER[i];
-		DrawRectangle(x + i * (bar_width + spacing), y + h - bar_height,
-			      bar_width, bar_height, color);
+	for (size_t i = 1; i < VB_SIZE; i++) {
+		float height_mod = (i>VB_SIZE/2) ? 1+ ( 0.02*i) : 1+ (0.02*(VB_SIZE-i));
+		float amp = 0.0f;
+		for (size_t j=0; j<VB_SIZE; j++){
+			amp += VISUAL_BUFFER[j][i];
+		}
+		amp /= (float) VB_SIZE;
+
+		float bar_height = h * amp * height_mod;
+		if (bar_height > h) bar_height=h;
+		DrawRectangle(x + i * bar_width, y + h - bar_height, bar_width, bar_height, color);
 	}
 }
 
@@ -191,16 +184,19 @@ int main(int argc, char **argv) {
 
 	AttachAudioStreamProcessor(music.stream, ProcessAudio);
 	PlayMusicStream(music);
-	sample_rate = music.stream.sampleRate;
+	
+	SAMPLE_RATE = music.stream.sampleRate;
+
 	char playsound = 1;
 	char drawfps = 0;
-
-	char visual_mode = 0;
+	char visual_mode = 1;
 
 	while (!WindowShouldClose()) {
+		float dt = GetFrameTime();
+
 		if (playsound) {
 			UpdateMusicStream(music);
-			ProcessFFT();
+			ProcessFFT(dt);
 		}
 
 		if (IsKeyPressed(KEY_SPACE)) {
@@ -237,7 +233,7 @@ int main(int argc, char **argv) {
 		screenHeight = GetScreenHeight();
 
 		BeginDrawing();
-		ClearBackground(RAYWHITE);
+		DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), RAYWHITE);
 		DrawText(TextFormat("%s %s", (playsound) ? "Playing" : "Paused",
 				    music_title),
 			 20, 20, 20, LIGHTGRAY);
@@ -275,8 +271,8 @@ int main(int argc, char **argv) {
 		if (drawfps) {
 			DrawFPS(screenWidth - 100, screenHeight - 20);
 		}
-
 		EndDrawing();
+
 	}
 	UnloadMusicStream(music);
 	CloseAudioDevice();
