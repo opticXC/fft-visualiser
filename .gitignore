@@ -1,4 +1,5 @@
 musics/
 tests/
-
-visualiser
+build/
+out/
+CMakeFiles/
